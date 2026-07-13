@@ -72,6 +72,12 @@ export function useDeckSettings(storage: SettingsStorage): DeckSettingsState {
 
   const update = useCallback((patch: Partial<DeckSettings>) => {
     hasUserUpdate.current = true;
+    // An update before `ready` bails out of the persistence effect via its
+    // own `!ready` check, without ever reaching the skipNextSave branch below
+    // — so skipNextSave.current is still whatever it was initialized to
+    // (true) and would otherwise cause that edit to be silently skipped once
+    // `ready` flips. Clear it here so the eventual save actually happens.
+    skipNextSave.current = false;
     setSettings((current) => parseDeckSettings({ ...current, ...patch }));
   }, []);
 

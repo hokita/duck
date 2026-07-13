@@ -66,15 +66,13 @@ describe("useDeckSettings", () => {
     expect(result.current.settings.rows).toBe(2);
   });
 
-  it("keeps a user edit made before the initial load resolves", async () => {
+  it("keeps a user edit made before the initial load resolves, and still saves it", async () => {
     let resolveLoad: ((value: unknown) => void) | undefined;
     const loadPromise = new Promise<unknown>((resolve) => {
       resolveLoad = resolve;
     });
-    const storage: SettingsStorage = {
-      load: () => loadPromise,
-      save: async () => {},
-    };
+    const storage = new MemoryStorage();
+    storage.load = () => loadPromise;
     const { result } = renderHook(() => useDeckSettings(storage));
 
     act(() => result.current.update({ columns: 4 }));
@@ -86,6 +84,10 @@ describe("useDeckSettings", () => {
     });
     expect(result.current.ready).toBe(true);
     expect(result.current.settings.columns).toBe(4);
+
+    await waitFor(() =>
+      expect((storage.value as { columns: number } | null)?.columns).toBe(4),
+    );
   });
 
   it("serializes saves so an older write can't finish after a newer one and leave stale data", async () => {
