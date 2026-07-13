@@ -16,7 +16,13 @@ const button: DeckButton = {
 
 const renderButton = (overrides: Partial<Parameters<typeof DeckButtonView>[0]> = {}) =>
   render(
-    <DeckButtonView button={button} size={88} compact={false} mode="deck" {...overrides} />,
+    <DeckButtonView
+      button={button}
+      size={88}
+      compact={false}
+      mode="deck"
+      {...overrides}
+    />,
   );
 
 describe("DeckButtonView", () => {

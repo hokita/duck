@@ -1,12 +1,7 @@
 import type { DeckButtonAction } from "../actions/DeckAction";
 
 export type DeckButtonStatus =
-  | "idle"
-  | "active"
-  | "working"
-  | "done"
-  | "warning"
-  | "error";
+  "idle" | "active" | "working" | "done" | "warning" | "error";
 
 export interface DeckButton {
   id: string;

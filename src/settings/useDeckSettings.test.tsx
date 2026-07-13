@@ -51,8 +51,6 @@ describe("useDeckSettings", () => {
     act(() => result.current.update({ columns: 99, compact: true }));
     expect(result.current.settings.columns).toBe(12);
     expect(result.current.settings.compact).toBe(true);
-    await waitFor(() =>
-      expect((storage.value as { columns: number }).columns).toBe(12),
-    );
+    await waitFor(() => expect((storage.value as { columns: number }).columns).toBe(12));
   });
 });

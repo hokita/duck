@@ -41,9 +41,7 @@ export function EditorPanel({
               <input
                 type="text"
                 value={selectedButton.title ?? ""}
-                onChange={(event) =>
-                  onUpdate({ title: event.target.value || undefined })
-                }
+                onChange={(event) => onUpdate({ title: event.target.value || undefined })}
               />
             </label>
             <label>

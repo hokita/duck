@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { DECK_SETTINGS_LIMITS, type DeckSettings } from "../../deck/models/DeckSettings";
 
 export interface SettingsPanelProps {
@@ -35,8 +35,13 @@ function NumericField({
   onChange(parsed: number): void;
 }) {
   const [text, setText] = useState(String(value));
-
-  useEffect(() => setText(String(value)), [value]);
+  // Adjust the buffer when the external value changes (e.g. settings reload),
+  // during render rather than in an effect, to avoid an extra post-mount render.
+  const [lastValue, setLastValue] = useState(value);
+  if (lastValue !== value) {
+    setLastValue(value);
+    setText(String(value));
+  }
 
   return (
     <label>

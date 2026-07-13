@@ -23,10 +23,21 @@ export function useDeckPages(provider: DeckButtonProvider): DeckPagesState {
   const [error, setError] = useState(false);
   const [loadCount, setLoadCount] = useState(0);
 
-  useEffect(() => {
-    let cancelled = false;
+  // Reset loading/error for a new request while rendering (rather than in the
+  // effect below), so a stale error doesn't linger across a provider swap or
+  // reload() and no cascading post-effect render is needed.
+  const [requestKey, setRequestKey] = useState<[DeckButtonProvider, number]>([
+    provider,
+    loadCount,
+  ]);
+  if (requestKey[0] !== provider || requestKey[1] !== loadCount) {
+    setRequestKey([provider, loadCount]);
     setLoading(true);
     setError(false);
+  }
+
+  useEffect(() => {
+    let cancelled = false;
     provider
       .getPages()
       .then((loaded) => {
