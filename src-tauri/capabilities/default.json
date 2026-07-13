@@ -6,7 +6,6 @@
   "permissions": [
     "core:default",
     "core:window:allow-set-always-on-top",
-    "core:window:allow-close",
-    "store:default"
+    "core:window:allow-close"
   ]
 }

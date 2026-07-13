@@ -10,6 +10,6 @@ export interface SettingsStorage {
 
 export function createSettingsStorage(key: string): SettingsStorage {
   return isTauri()
-    ? new TauriStoreSettingsStorage(key)
+    ? new TauriStoreSettingsStorage()
     : new LocalStorageSettingsStorage(key);
 }
