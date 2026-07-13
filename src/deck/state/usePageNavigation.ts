@@ -12,16 +12,42 @@ export interface PageNavigation {
 }
 
 export function usePageNavigation(pages: DeckPage[]): PageNavigation {
-  const [rawIndex, setRawIndex] = useState(0);
+  // Tracked by id (not array position) so a provider push that reorders or
+  // inserts pages doesn't silently change which page is showing — only a
+  // page's actual removal falls back to the first page.
+  const [currentPageId, setCurrentPageId] = useState<string | null>(pages[0]?.id ?? null);
   const pageCount = pages.length;
-  const pageIndex = pageCount === 0 ? 0 : Math.min(rawIndex, pageCount - 1);
 
-  const next = useCallback(
-    () => setRawIndex((index) => Math.min(index + 1, Math.max(pageCount - 1, 0))),
-    [pageCount],
-  );
-  const previous = useCallback(() => setRawIndex((index) => Math.max(index - 1, 0)), []);
-  const home = useCallback(() => setRawIndex(0), []);
+  const resolvedIndex = pages.findIndex((page) => page.id === currentPageId);
+  const pageIndex = resolvedIndex === -1 ? 0 : resolvedIndex;
+  const currentPage = pages[pageIndex] ?? null;
+
+  // Adjust during render (not an effect) when the tracked id no longer
+  // resolves, so next/previous/goToPage below always act relative to
+  // whichever page is actually being shown.
+  if (currentPage && currentPage.id !== currentPageId) {
+    setCurrentPageId(currentPage.id);
+  }
+
+  const next = useCallback(() => {
+    setCurrentPageId((id) => {
+      const from = pages.findIndex((page) => page.id === id);
+      const base = from === -1 ? 0 : from;
+      return pages[Math.min(base + 1, pages.length - 1)]?.id ?? id;
+    });
+  }, [pages]);
+
+  const previous = useCallback(() => {
+    setCurrentPageId((id) => {
+      const from = pages.findIndex((page) => page.id === id);
+      const base = from === -1 ? 0 : from;
+      return pages[Math.max(base - 1, 0)]?.id ?? id;
+    });
+  }, [pages]);
+
+  const home = useCallback(() => {
+    setCurrentPageId(pages[0]?.id ?? null);
+  }, [pages]);
 
   const goToPage = useCallback(
     (pageId: string): boolean => {
@@ -37,12 +63,12 @@ export function usePageNavigation(pages: DeckPage[]): PageNavigation {
         home();
         return true;
       }
-      const index = pages.findIndex((page) => page.id === pageId);
-      if (index === -1) {
+      const target = pages.find((page) => page.id === pageId);
+      if (!target) {
         console.warn(`[deck] unknown page "${pageId}"`);
         return false;
       }
-      setRawIndex(index);
+      setCurrentPageId(target.id);
       return true;
     },
     [pages, next, previous, home],
@@ -51,7 +77,7 @@ export function usePageNavigation(pages: DeckPage[]): PageNavigation {
   return {
     pageIndex,
     pageCount,
-    currentPage: pages[pageIndex] ?? null,
+    currentPage,
     next,
     previous,
     home,

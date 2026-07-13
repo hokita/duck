@@ -19,16 +19,27 @@ export function useDeckSettings(storage: SettingsStorage): DeckSettingsState {
   // Skips persisting the settings load itself; only user-driven updates
   // (below) should write back to storage.
   const skipNextSave = useRef(true);
+  // Set as soon as the user changes anything, so a slow initial load can't
+  // clobber an edit that happened before it resolved.
+  const hasUserUpdate = useRef(false);
+  // Chains saves so an older write's I/O can never finish after a newer
+  // one's and leave stale data on disk — each save starts only once the
+  // previous one has settled.
+  const saveQueue = useRef(Promise.resolve());
 
   useEffect(() => {
     let cancelled = false;
     storage
       .load()
       .then((value) => {
-        if (!cancelled) {
-          setSettings(parseDeckSettings(value));
-          setReady(true);
+        if (cancelled) {
+          return;
         }
+        if (!hasUserUpdate.current) {
+          skipNextSave.current = true;
+          setSettings(parseDeckSettings(value));
+        }
+        setReady(true);
       })
       .catch((error) => {
         console.error("[deck] failed to load settings", error);
@@ -52,12 +63,15 @@ export function useDeckSettings(storage: SettingsStorage): DeckSettingsState {
       skipNextSave.current = false;
       return;
     }
-    storage.save(settings).catch((error) => {
-      console.error("[deck] failed to save settings", error);
-    });
+    saveQueue.current = saveQueue.current
+      .then(() => storage.save(settings))
+      .catch((error) => {
+        console.error("[deck] failed to save settings", error);
+      });
   }, [settings, ready, storage]);
 
   const update = useCallback((patch: Partial<DeckSettings>) => {
+    hasUserUpdate.current = true;
     setSettings((current) => parseDeckSettings({ ...current, ...patch }));
   }, []);
 

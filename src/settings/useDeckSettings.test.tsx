@@ -65,4 +65,51 @@ describe("useDeckSettings", () => {
     expect(result.current.settings.columns).toBe(4);
     expect(result.current.settings.rows).toBe(2);
   });
+
+  it("keeps a user edit made before the initial load resolves", async () => {
+    let resolveLoad: ((value: unknown) => void) | undefined;
+    const loadPromise = new Promise<unknown>((resolve) => {
+      resolveLoad = resolve;
+    });
+    const storage: SettingsStorage = {
+      load: () => loadPromise,
+      save: async () => {},
+    };
+    const { result } = renderHook(() => useDeckSettings(storage));
+
+    act(() => result.current.update({ columns: 4 }));
+    expect(result.current.settings.columns).toBe(4);
+
+    await act(async () => {
+      resolveLoad?.({ columns: 9 });
+      await loadPromise;
+    });
+    expect(result.current.ready).toBe(true);
+    expect(result.current.settings.columns).toBe(4);
+  });
+
+  it("serializes saves so an older write can't finish after a newer one and leave stale data", async () => {
+    const pending: { value: unknown; resolve: () => void }[] = [];
+    const storage: SettingsStorage = {
+      load: async () => null,
+      save: (value) =>
+        new Promise<void>((resolve) => {
+          pending.push({ value, resolve });
+        }),
+    };
+    const { result } = renderHook(() => useDeckSettings(storage));
+    await waitFor(() => expect(result.current.ready).toBe(true));
+
+    act(() => result.current.update({ columns: 4 }));
+    await waitFor(() => expect(pending).toHaveLength(1));
+
+    act(() => result.current.update({ columns: 6 }));
+    // The second save must not be dispatched until the first resolves.
+    expect(pending).toHaveLength(1);
+
+    pending[0].resolve();
+    await waitFor(() => expect(pending).toHaveLength(2));
+    expect((pending[0].value as { columns: number }).columns).toBe(4);
+    expect((pending[1].value as { columns: number }).columns).toBe(6);
+  });
 });

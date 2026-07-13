@@ -94,7 +94,7 @@ export interface DeckButtonProvider {
 }
 ```
 
-It returns *pages* (not a flat button list) because paging is a first-class concept
+It returns _pages_ (not a flat button list) because paging is a first-class concept
 here — `navigate` actions jump between them, and `usePageNavigation` clamps/derives
 the current page from whatever the provider returns.
 
@@ -153,9 +153,10 @@ const result = await dispatcher.dispatch(button.action);
 ```
 
 `App.tsx` registers handlers for `navigate` (calls `usePageNavigation`'s `goToPage`)
-and `custom` (currently only recognizes `open-settings`; anything else is logged as
-a warning and ignored). Unknown action types, or a button with no `action` at all,
-resolve to `"ignored"` rather than crashing.
+and `custom` (currently only recognizes `open-settings`). A `navigate` to an unknown
+page id, or a `custom` action with an unrecognized `actionId`, resolves to `"failed"`
+(logged, never thrown past `dispatch()`) rather than silently reporting `"handled"`.
+Unknown action _types_, or a button with no `action` at all, resolve to `"ignored"`.
 
 `navigate` accepts three reserved page ids handled specially, in addition to real
 page ids: `next`, `previous`, `home`.
@@ -163,12 +164,19 @@ page ids: `next`, `previous`, `home`.
 ## Persistence
 
 - **Deck settings** (columns/rows/button size/gap/compact/always-on-top) persist via
-  `tauri-plugin-store`, written to a `settings.json` file in the app's data
-  directory. Outside of Tauri (e.g. `npm run dev` in a browser, or tests), the same
+  two fixed-path Rust commands, `load_settings`/`save_settings`
+  (`src-tauri/src/lib.rs`), backed by `tauri-plugin-store`'s Rust API writing a
+  `settings.json` file in the app's data directory. The store's file path and key
+  are hardcoded in Rust rather than passed from the frontend — the WebView is
+  granted no `store:*` permission at all, only these two commands, so a compromised
+  or malicious script in the WebView can't point the store at an arbitrary path.
+  Outside of Tauri (e.g. `npm run dev` in a browser, or tests), the same
   `SettingsStorage` interface falls back to `localStorage` — selected automatically
   by `createSettingsStorage()` based on an `isTauri()` runtime check. Persisted
   values are re-validated and clamped on load (`parseDeckSettings`), so a corrupted
-  or hand-edited settings file can't crash the app.
+  or hand-edited settings file can't crash the app. Saves are serialized (queued
+  one after another) so an older write can't finish after a newer one and leave
+  stale data on disk.
 - **Window geometry** (position/size) persists via `tauri-plugin-window-state`.
 
 ## macOS / Tauri notes
@@ -181,10 +189,13 @@ page ids: `next`, `previous`, `home`.
 - The toolbar header is the only drag region (`data-tauri-drag-region`), so the
   window can be repositioned without swallowing clicks on grid buttons.
 - Capabilities are scoped to exactly what's used: `core:default`,
-  `core:window:allow-set-always-on-top` (for the always-on-top setting),
-  `core:window:allow-close` (for the toolbar's close button), and `store:default`
-  (settings persistence). No filesystem, shell, or network permissions are
-  requested.
+  `core:window:allow-set-always-on-top` (for the always-on-top setting), and
+  `core:window:allow-close` (for the toolbar's close button). Notably, no
+  `store:*` permission is granted — settings persistence goes through the
+  fixed-path `load_settings`/`save_settings` commands instead (see
+  [Persistence](#persistence)), so the WebView has no way to read or write an
+  arbitrary file via the store plugin. No filesystem, shell, or network
+  permissions are requested.
 - A restrictive CSP is set in `tauri.conf.json` (`default-src 'self'`, no remote
   script/style origins).
 

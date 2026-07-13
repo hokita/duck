@@ -53,7 +53,7 @@ export function DeckButtonView({
       type="button"
       className={classes}
       style={style}
-      disabled={mode === "deck" && (button.disabled ?? false)}
+      disabled={mode === "deck" && (isPlaceholder || (button.disabled ?? false))}
       aria-label={button.title ?? "Empty button"}
       onClick={handleClick}
     >

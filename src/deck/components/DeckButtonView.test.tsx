@@ -77,4 +77,14 @@ describe("DeckButtonView", () => {
     renderButton({ button: { id: "empty-1" } });
     expect(screen.getByRole("button", { name: "Empty button" })).toBeInTheDocument();
   });
+
+  it("is not keyboard-focusable in deck mode, but is selectable in edit mode", () => {
+    const { rerender } = renderButton({ button: { id: "empty-1" }, mode: "deck" });
+    expect(screen.getByRole("button", { name: "Empty button" })).toBeDisabled();
+
+    rerender(
+      <DeckButtonView button={{ id: "empty-1" }} size={88} compact={false} mode="edit" />,
+    );
+    expect(screen.getByRole("button", { name: "Empty button" })).toBeEnabled();
+  });
 });

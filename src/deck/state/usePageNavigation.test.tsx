@@ -60,4 +60,26 @@ describe("usePageNavigation", () => {
     expect(result.current.pageIndex).toBe(0);
     expect(result.current.currentPage?.id).toBe("main");
   });
+
+  it("stays on the same page by id when a push reorders or inserts pages", () => {
+    const { result, rerender } = renderHook(({ p }) => usePageNavigation(p), {
+      initialProps: { p: pages },
+    });
+    act(() => {
+      result.current.goToPage("wall");
+    });
+    expect(result.current.pageIndex).toBe(2);
+
+    // A provider push inserts a page before "wall", shifting its numeric
+    // position without removing it — the tracked page must not change.
+    const reordered: DeckPage[] = [
+      pages[0],
+      { id: "inserted", name: "Inserted", buttons: [] },
+      pages[1],
+      pages[2],
+    ];
+    rerender({ p: reordered });
+    expect(result.current.pageIndex).toBe(3);
+    expect(result.current.currentPage?.id).toBe("wall");
+  });
 });

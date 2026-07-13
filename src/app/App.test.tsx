@@ -101,6 +101,32 @@ describe("App", () => {
     ).toBeInTheDocument();
   });
 
+  it("reports a failed dispatch for a navigate action with an unknown page id", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const deps = makeDeps();
+    render(<App dependencies={deps} />);
+    await screen.findByRole("button", { name: "Hello" });
+    const result = await deps.dispatcher.dispatch({
+      type: "navigate",
+      pageId: "missing",
+    });
+    expect(result.status).toBe("failed");
+    error.mockRestore();
+  });
+
+  it("reports a failed dispatch for an unrecognized custom action", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const deps = makeDeps();
+    render(<App dependencies={deps} />);
+    await screen.findByRole("button", { name: "Hello" });
+    const result = await deps.dispatcher.dispatch({
+      type: "custom",
+      actionId: "does-not-exist",
+    });
+    expect(result.status).toBe("failed");
+    error.mockRestore();
+  });
+
   it("persists settings changes", async () => {
     const storage = new LocalStorageSettingsStorage("duck.settings");
     render(<App dependencies={makeDeps({ settingsStorage: storage })} />);

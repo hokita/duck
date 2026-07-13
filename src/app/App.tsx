@@ -26,7 +26,9 @@ export default function App({ dependencies }: { dependencies?: AppDependencies }
   useEffect(
     () =>
       deps.dispatcher.register("navigate", (action) => {
-        goToPage(action.pageId);
+        if (!goToPage(action.pageId)) {
+          throw new Error(`unknown page "${action.pageId}"`);
+        }
       }),
     [deps.dispatcher, goToPage],
   );
@@ -38,14 +40,16 @@ export default function App({ dependencies }: { dependencies?: AppDependencies }
           setSettingsOpen(true);
           return;
         }
-        console.warn(`[deck] unknown custom action "${action.actionId}"`);
+        throw new Error(`unknown custom action "${action.actionId}"`);
       }),
     [deps.dispatcher],
   );
 
   useEffect(() => {
     if (ready) {
-      void setWindowAlwaysOnTop(settings.alwaysOnTop);
+      setWindowAlwaysOnTop(settings.alwaysOnTop).catch((error) => {
+        console.error("[deck] failed to set always-on-top", error);
+      });
     }
   }, [ready, settings.alwaysOnTop]);
 
@@ -96,7 +100,11 @@ export default function App({ dependencies }: { dependencies?: AppDependencies }
         mode={mode}
         onToggleEdit={handleToggleEdit}
         onOpenSettings={() => setSettingsOpen(true)}
-        onClose={() => void closeAppWindow()}
+        onClose={() =>
+          closeAppWindow().catch((error) => {
+            console.error("[deck] failed to close window", error);
+          })
+        }
       />
       <main className="deck-main">
         <Deck
