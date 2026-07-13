@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "duck",
+  "productName": "Duck Deck",
   "version": "0.1.0",
   "identifier": "com.hokita.duck",
   "build": {
@@ -10,15 +10,24 @@
     "frontendDist": "../dist"
   },
   "app": {
+    "macOSPrivateApi": true,
     "windows": [
       {
-        "title": "duck",
-        "width": 800,
-        "height": 600
+        "title": "Duck Deck",
+        "width": 560,
+        "height": 400,
+        "minWidth": 320,
+        "minHeight": 240,
+        "resizable": true,
+        "decorations": false,
+        "transparent": true,
+        "shadow": false,
+        "acceptFirstMouse": true
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost; style-src 'self' 'unsafe-inline'; img-src 'self' data:",
+      "devCsp": "default-src 'self'; connect-src ipc: http://ipc.localhost ws://localhost:1420; style-src 'self' 'unsafe-inline'; img-src 'self' data:"
     }
   },
   "bundle": {
