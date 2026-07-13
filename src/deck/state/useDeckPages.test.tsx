@@ -34,7 +34,8 @@ describe("useDeckPages", () => {
       .fn<() => Promise<DeckPage[]>>()
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce(somePages);
-    const { result } = renderHook(() => useDeckPages({ getPages }));
+    const provider: DeckButtonProvider = { getPages };
+    const { result } = renderHook(() => useDeckPages(provider));
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.pages).toEqual([]);
     act(() => result.current.reload());
