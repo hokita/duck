@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   DEFAULT_DECK_SETTINGS,
   parseDeckSettings,
@@ -16,6 +16,9 @@ export interface DeckSettingsState {
 export function useDeckSettings(storage: SettingsStorage): DeckSettingsState {
   const [settings, setSettings] = useState<DeckSettings>(DEFAULT_DECK_SETTINGS);
   const [ready, setReady] = useState(false);
+  // Skips persisting the settings load itself; only user-driven updates
+  // (below) should write back to storage.
+  const skipNextSave = useRef(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -38,18 +41,25 @@ export function useDeckSettings(storage: SettingsStorage): DeckSettingsState {
     };
   }, [storage]);
 
-  const update = useCallback(
-    (patch: Partial<DeckSettings>) => {
-      setSettings((current) => {
-        const next = parseDeckSettings({ ...current, ...patch });
-        storage.save(next).catch((error) => {
-          console.error("[deck] failed to save settings", error);
-        });
-        return next;
-      });
-    },
-    [storage],
-  );
+  // Persisting here (rather than inside the setSettings updater in `update`)
+  // keeps the updater pure — a state updater can run twice under Strict Mode,
+  // which would otherwise cause duplicate/racing writes.
+  useEffect(() => {
+    if (!ready) {
+      return;
+    }
+    if (skipNextSave.current) {
+      skipNextSave.current = false;
+      return;
+    }
+    storage.save(settings).catch((error) => {
+      console.error("[deck] failed to save settings", error);
+    });
+  }, [settings, ready, storage]);
+
+  const update = useCallback((patch: Partial<DeckSettings>) => {
+    setSettings((current) => parseDeckSettings({ ...current, ...patch }));
+  }, []);
 
   return { settings, ready, update };
 }

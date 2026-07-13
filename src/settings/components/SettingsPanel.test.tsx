@@ -1,8 +1,27 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { DEFAULT_DECK_SETTINGS } from "../../deck/models/DeckSettings";
+import {
+  DEFAULT_DECK_SETTINGS,
+  parseDeckSettings,
+  type DeckSettings,
+} from "../../deck/models/DeckSettings";
 import { SettingsPanel } from "./SettingsPanel";
+
+/** Mimics a real parent that clamps every patch through parseDeckSettings. */
+function StatefulPanel({ initial }: { initial: DeckSettings }) {
+  const [settings, setSettings] = useState(initial);
+  return (
+    <SettingsPanel
+      settings={settings}
+      onChange={(patch) =>
+        setSettings((current) => parseDeckSettings({ ...current, ...patch }))
+      }
+      onClose={() => {}}
+    />
+  );
+}
 
 const renderPanel = (overrides: Partial<Parameters<typeof SettingsPanel>[0]> = {}) => {
   const props = {
@@ -49,5 +68,15 @@ describe("SettingsPanel", () => {
     const { onClose } = renderPanel();
     await userEvent.click(screen.getByRole("button", { name: "Close settings" }));
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it("keeps typed digits intact even when an intermediate value gets clamped", async () => {
+    render(<StatefulPanel initial={DEFAULT_DECK_SETTINGS} />);
+    const buttonSize = screen.getByLabelText("Button size");
+    await userEvent.clear(buttonSize);
+    // Typing "1" then "2" clamps to the 48 minimum before "120" is complete;
+    // the field must keep the typed digits rather than snap to the clamped echo.
+    await userEvent.type(buttonSize, "120");
+    expect(buttonSize).toHaveValue(120);
   });
 });

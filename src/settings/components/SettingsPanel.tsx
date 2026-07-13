@@ -18,8 +18,11 @@ const NUMERIC_FIELDS: { key: NumericKey; label: string }[] = [
 
 /**
  * Buffers the raw text so clearing the field doesn't get overwritten by the
- * (unchanged) parent value on the next render, which would otherwise make
- * typed digits append to the stale value instead of replacing it.
+ * parent's (unchanged, or clamped-mid-edit) value on the next render, which
+ * would otherwise make typed digits append to or overwrite the stale value
+ * instead of replacing it. The parent value only wins once the field is
+ * blurred, so a value that clamps low while still being typed (e.g. "1" of
+ * "120" hitting a 48 minimum) doesn't stomp the in-progress text.
  */
 function NumericField({
   label,
@@ -35,12 +38,13 @@ function NumericField({
   onChange(parsed: number): void;
 }) {
   const [text, setText] = useState(String(value));
-  // Adjust the buffer when the external value changes (e.g. settings reload),
-  // during render rather than in an effect, to avoid an extra post-mount render.
   const [lastValue, setLastValue] = useState(value);
+  const [isFocused, setIsFocused] = useState(false);
   if (lastValue !== value) {
     setLastValue(value);
-    setText(String(value));
+    if (!isFocused) {
+      setText(String(value));
+    }
   }
 
   return (
@@ -51,6 +55,11 @@ function NumericField({
         min={min}
         max={max}
         value={text}
+        onFocus={() => setIsFocused(true)}
+        onBlur={() => {
+          setIsFocused(false);
+          setText(String(value));
+        }}
         onChange={(event) => {
           setText(event.target.value);
           const parsed = Number(event.target.value);

@@ -43,6 +43,34 @@ describe("useDeckPages", () => {
     expect(getPages).toHaveBeenCalledTimes(2);
   });
 
+  it("keeps a push update that arrives before the initial fetch resolves", async () => {
+    let resolveFetch: ((pages: DeckPage[]) => void) | undefined;
+    const fetchPromise = new Promise<DeckPage[]>((resolve) => {
+      resolveFetch = resolve;
+    });
+    let push: ((pages: DeckPage[]) => void) | undefined;
+    const provider: DeckButtonProvider = {
+      getPages: () => fetchPromise,
+      subscribe: (listener) => {
+        push = listener;
+        return () => {
+          push = undefined;
+        };
+      },
+    };
+    const { result } = renderHook(() => useDeckPages(provider));
+
+    act(() => push?.(somePages));
+    expect(result.current.pages).toEqual(somePages);
+    expect(result.current.loading).toBe(false);
+
+    await act(async () => {
+      resolveFetch?.([]);
+      await fetchPromise;
+    });
+    expect(result.current.pages).toEqual(somePages);
+  });
+
   it("applies pushed updates from subscribe", async () => {
     let push: ((pages: DeckPage[]) => void) | undefined;
     const provider: DeckButtonProvider = {

@@ -38,26 +38,31 @@ export function useDeckPages(provider: DeckButtonProvider): DeckPagesState {
 
   useEffect(() => {
     let cancelled = false;
+    // A push can resolve before the initial fetch does; once that happens the
+    // fetch's (now stale) snapshot must not overwrite the newer pushed pages.
+    let pushed = false;
+    const unsubscribe = provider.subscribe?.((updated) => {
+      if (!cancelled) {
+        pushed = true;
+        setPages(updated);
+        setLoading(false);
+      }
+    });
     provider
       .getPages()
       .then((loaded) => {
-        if (!cancelled) {
+        if (!cancelled && !pushed) {
           setPages(loaded);
           setLoading(false);
         }
       })
       .catch((cause) => {
-        if (!cancelled) {
+        if (!cancelled && !pushed) {
           console.error("[deck] button provider failed", cause);
           setError(true);
           setLoading(false);
         }
       });
-    const unsubscribe = provider.subscribe?.((updated) => {
-      if (!cancelled) {
-        setPages(updated);
-      }
-    });
     return () => {
       cancelled = true;
       unsubscribe?.();

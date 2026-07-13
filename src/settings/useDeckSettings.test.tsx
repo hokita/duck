@@ -53,4 +53,16 @@ describe("useDeckSettings", () => {
     expect(result.current.settings.compact).toBe(true);
     await waitFor(() => expect((storage.value as { columns: number }).columns).toBe(12));
   });
+
+  it("merges multiple synchronous updates against each other, not just the pre-update state", async () => {
+    const storage = new MemoryStorage();
+    const { result } = renderHook(() => useDeckSettings(storage));
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    act(() => {
+      result.current.update({ columns: 4 });
+      result.current.update({ rows: 2 });
+    });
+    expect(result.current.settings.columns).toBe(4);
+    expect(result.current.settings.rows).toBe(2);
+  });
 });
