@@ -29,6 +29,6 @@ export class TauriStoreSettingsStorage implements SettingsStorage {
 
   private async openStore() {
     const { load } = await import("@tauri-apps/plugin-store");
-    return load(this.file, { autoSave: false });
+    return load(this.file, { autoSave: false, defaults: {} });
   }
 }
