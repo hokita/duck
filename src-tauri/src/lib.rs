@@ -30,7 +30,12 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::default().build())
         // Persists and restores window size/position automatically.
         .plugin(tauri_plugin_window_state::Builder::default().build())
-        .invoke_handler(tauri::generate_handler![load_settings, save_settings])
+        .invoke_handler(tauri::generate_handler![
+            load_settings,
+            save_settings,
+            sources::list_source_pages,
+            sources::activate_source_button
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

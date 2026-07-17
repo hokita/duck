@@ -3,10 +3,6 @@
 //! resolution happens on the Rust side so the WebView never supplies paths
 //! or commands.
 
-// Until the source commands land in lib.rs, nothing outside the tests calls
-// into this module.
-#![allow(dead_code)]
-
 use serde::Deserialize;
 use std::collections::HashMap;
 
@@ -192,6 +188,117 @@ pub fn page_from_source(source_index: usize, source: &SourceConfig) -> serde_jso
         "name": source.name,
         "buttons": buttons,
     })
+}
+
+/// Builds the argv for a source's action: `~`/`$VAR` expansion runs on the
+/// trusted template elements first, then `{field}` substitution inserts file
+/// values — so values read from watched files are never env-expanded and land
+/// as single argv elements.
+pub fn resolve_action(
+    source: &SourceConfig,
+    file: &serde_json::Value,
+) -> Result<Vec<String>, String> {
+    let template = source
+        .button
+        .action
+        .as_ref()
+        .ok_or_else(|| format!("source \"{}\" has no action", source.name))?;
+    if template.is_empty() {
+        return Err(format!("source \"{}\" has an empty action", source.name));
+    }
+    Ok(template
+        .iter()
+        .map(|element| substitute(&expand_config_value(element), file))
+        .collect())
+}
+
+pub fn load_config_from(path: &std::path::Path) -> Result<Option<SourcesConfig>, String> {
+    match std::fs::read_to_string(path) {
+        Ok(raw) => parse_sources_config(&raw).map(Some),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error.to_string()),
+    }
+}
+
+pub fn pages_from_config(config: &SourcesConfig) -> Vec<serde_json::Value> {
+    config
+        .sources
+        .iter()
+        .enumerate()
+        .map(|(index, source)| page_from_source(index, source))
+        .collect()
+}
+
+/// Re-resolves a button press from disk. The WebView only names a source and
+/// button id; the file is re-read and the argv rebuilt here so the UI can
+/// never supply a path or command.
+pub fn resolve_button_action(
+    config: &SourcesConfig,
+    source_id: &str,
+    button_id: &str,
+) -> Result<Vec<String>, String> {
+    let index: usize = source_id
+        .strip_prefix('s')
+        .and_then(|raw| raw.parse().ok())
+        .ok_or_else(|| format!("invalid source id \"{source_id}\""))?;
+    let source = config
+        .sources
+        .get(index)
+        .ok_or_else(|| format!("unknown source \"{source_id}\""))?;
+    let stem = button_id
+        .strip_prefix(&format!("{source_id}:"))
+        .ok_or_else(|| format!("button \"{button_id}\" is not in source \"{source_id}\""))?;
+    if stem.contains('/') || stem.contains("..") || stem.contains('\\') {
+        return Err(format!("invalid button id \"{button_id}\""));
+    }
+    let path = std::path::Path::new(&expand_config_value(&source.path))
+        .join(format!("{stem}.json"));
+    let raw = std::fs::read_to_string(&path)
+        .map_err(|error| format!("cannot read {}: {error}", path.display()))?;
+    let file: serde_json::Value =
+        serde_json::from_str(&raw).map_err(|error| error.to_string())?;
+    resolve_action(source, &file)
+}
+
+fn config_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    use tauri::Manager;
+    app.path()
+        .app_config_dir()
+        .map(|dir| dir.join("sources.json"))
+        .map_err(|error| error.to_string())
+}
+
+/// Returns the configured source pages, or None when no sources.json exists
+/// (the frontend then falls back to its built-in provider).
+#[tauri::command]
+pub fn list_source_pages(
+    app: tauri::AppHandle,
+) -> Result<Option<Vec<serde_json::Value>>, String> {
+    let Some(config) = load_config_from(&config_path(&app)?)? else {
+        return Ok(None);
+    };
+    Ok(Some(pages_from_config(&config)))
+}
+
+#[tauri::command]
+pub fn activate_source_button(
+    app: tauri::AppHandle,
+    source_id: String,
+    button_id: String,
+) -> Result<(), String> {
+    let config = load_config_from(&config_path(&app)?)?
+        .ok_or_else(|| "no sources configured".to_string())?;
+    let argv = resolve_button_action(&config, &source_id, &button_id)?;
+    let child = std::process::Command::new(&argv[0])
+        .args(&argv[1..])
+        .spawn()
+        .map_err(|error| format!("failed to spawn {}: {error}", argv[0]))?;
+    // Reap the child off-thread so it neither blocks the command nor lingers
+    // as a zombie.
+    std::thread::spawn(move || {
+        let _ = { child }.wait_with_output();
+    });
+    Ok(())
 }
 
 #[cfg(test)]
@@ -397,5 +504,101 @@ mod tests {
         let page = page_from_source(3, &source);
         assert_eq!(page["id"], "s3");
         assert_eq!(page["buttons"].as_array().map(Vec::len), Some(0));
+    }
+
+    #[test]
+    fn resolves_action_argv_with_config_expansion_and_file_substitution() {
+        let home = std::env::var("HOME").expect("HOME set in test env");
+        let file = serde_json::json!({"tmux_session": "duck", "tmux_pane": "%20"});
+        let argv = resolve_action(&claude_source(), &file).expect("argv");
+        assert_eq!(
+            argv,
+            vec![format!("{home}/bin/claude-monitor-open"), "duck".into(), "%20".into()]
+        );
+    }
+
+    #[test]
+    fn never_expands_env_vars_coming_from_file_values() {
+        let file = serde_json::json!({"tmux_session": "$HOME", "tmux_pane": "; rm -rf x"});
+        let argv = resolve_action(&claude_source(), &file).expect("argv");
+        // File values must stay literal single argv elements.
+        assert_eq!(argv[1], "$HOME");
+        assert_eq!(argv[2], "; rm -rf x");
+    }
+
+    #[test]
+    fn resolve_action_fails_without_an_action_template() {
+        let mut source = claude_source();
+        source.button.action = None;
+        assert!(resolve_action(&source, &serde_json::json!({})).is_err());
+    }
+
+    #[test]
+    fn load_config_from_missing_file_is_none() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let result = load_config_from(&dir.path().join("sources.json"));
+        assert!(matches!(result, Ok(None)));
+    }
+
+    #[test]
+    fn load_config_from_reads_and_validates() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("sources.json");
+        std::fs::write(&path, CLAUDE_EXAMPLE).expect("write config");
+        let config = load_config_from(&path).expect("loads").expect("some config");
+        assert_eq!(config.sources.len(), 1);
+
+        std::fs::write(&path, "{broken").expect("write config");
+        assert!(load_config_from(&path).is_err());
+    }
+
+    #[test]
+    fn pages_from_config_yields_one_page_per_source() {
+        let mut config = parse_sources_config(CLAUDE_EXAMPLE).expect("parses");
+        let mut second = claude_source();
+        second.name = "Other".into();
+        config.sources.push(second);
+        let pages = pages_from_config(&config);
+        assert_eq!(pages.len(), 2);
+        assert_eq!(pages[0]["id"], "s0");
+        assert_eq!(pages[1]["id"], "s1");
+        assert_eq!(pages[1]["name"], "Other");
+    }
+
+    fn dir_with_session(content: &str) -> (tempfile::TempDir, SourcesConfig) {
+        let dir = tempfile::tempdir().expect("tempdir");
+        std::fs::write(dir.path().join("corgi-30.json"), content).expect("write file");
+        let mut config = parse_sources_config(CLAUDE_EXAMPLE).expect("parses");
+        config.sources[0].path = dir.path().to_string_lossy().into_owned();
+        (dir, config)
+    }
+
+    #[test]
+    fn resolve_button_action_re_reads_the_file_from_disk() {
+        let (_dir, config) =
+            dir_with_session(r#"{"tmux_session":"duck","tmux_pane":"%20"}"#);
+        let argv =
+            resolve_button_action(&config, "s0", "s0:corgi-30").expect("argv");
+        assert_eq!(argv[1], "duck");
+        assert_eq!(argv[2], "%20");
+    }
+
+    #[test]
+    fn resolve_button_action_rejects_unknown_ids() {
+        let (_dir, config) =
+            dir_with_session(r#"{"tmux_session":"duck","tmux_pane":"%20"}"#);
+        assert!(resolve_button_action(&config, "s9", "s9:corgi-30").is_err());
+        assert!(resolve_button_action(&config, "s0", "s0:missing-file").is_err());
+        assert!(resolve_button_action(&config, "nonsense", "nonsense:x").is_err());
+        // Button id must belong to the named source.
+        assert!(resolve_button_action(&config, "s0", "s1:corgi-30").is_err());
+    }
+
+    #[test]
+    fn resolve_button_action_rejects_path_traversal_stems() {
+        let (_dir, config) =
+            dir_with_session(r#"{"tmux_session":"duck","tmux_pane":"%20"}"#);
+        assert!(resolve_button_action(&config, "s0", "s0:../corgi-30").is_err());
+        assert!(resolve_button_action(&config, "s0", "s0:a/b").is_err());
     }
 }
