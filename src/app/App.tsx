@@ -8,6 +8,7 @@ import { EditorPanel } from "../editor/components/EditorPanel";
 import { moveButton, updateButton, type MoveDirection } from "../editor/editOperations";
 import { SettingsPanel } from "../settings/components/SettingsPanel";
 import { useDeckSettings } from "../settings/useDeckSettings";
+import { activateSourceButton } from "../sources/activateSourceButton";
 import { closeAppWindow, setWindowAlwaysOnTop } from "../shared/tauri";
 import { createAppDependencies, type AppDependencies } from "./providers";
 
@@ -35,9 +36,13 @@ export default function App({ dependencies }: { dependencies?: AppDependencies }
 
   useEffect(
     () =>
-      deps.dispatcher.register("custom", (action) => {
+      deps.dispatcher.register("custom", async (action) => {
         if (action.actionId === "open-settings") {
           setSettingsOpen(true);
+          return;
+        }
+        if (action.actionId === "source:activate") {
+          await activateSourceButton(action.payload);
           return;
         }
         throw new Error(`unknown custom action "${action.actionId}"`);

@@ -7,6 +7,10 @@ import type { DeckButtonProvider } from "../deck/providers/DeckButtonProvider";
 import { LocalStorageSettingsStorage } from "../settings/storage/LocalStorageSettingsStorage";
 import App, { type AppDependencies } from "./App";
 
+// App's source:activate handler reaches the real Tauri invoke via dynamic
+// import; jsdom has no Tauri host, so the module is mocked.
+vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => undefined) }));
+
 const pages: DeckPage[] = [
   {
     id: "main",
@@ -122,6 +126,50 @@ describe("App", () => {
     const result = await deps.dispatcher.dispatch({
       type: "custom",
       actionId: "does-not-exist",
+    });
+    expect(result.status).toBe("failed");
+    error.mockRestore();
+  });
+
+  it("invokes the activation command when a source button is pressed", async () => {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const withSourceButton: DeckButtonProvider = {
+      getPages: async () => [
+        {
+          id: "s0",
+          name: "Claude Code",
+          buttons: [
+            {
+              id: "s0:corgi-30",
+              title: "duck",
+              action: {
+                type: "custom",
+                actionId: "source:activate",
+                payload: { sourceId: "s0", buttonId: "s0:corgi-30" },
+              },
+            },
+          ],
+        },
+      ],
+    };
+    render(<App dependencies={makeDeps({ provider: withSourceButton })} />);
+    await userEvent.click(await screen.findByRole("button", { name: "duck" }));
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("activate_source_button", {
+        sourceId: "s0",
+        buttonId: "s0:corgi-30",
+      }),
+    );
+  });
+
+  it("reports a failed dispatch for a source activation without a payload", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const deps = makeDeps();
+    render(<App dependencies={deps} />);
+    await screen.findByRole("button", { name: "Hello" });
+    const result = await deps.dispatcher.dispatch({
+      type: "custom",
+      actionId: "source:activate",
     });
     expect(result.status).toBe("failed");
     error.mockRestore();
