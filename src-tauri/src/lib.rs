@@ -1,5 +1,7 @@
 use tauri_plugin_store::StoreExt;
 
+mod sources;
+
 const SETTINGS_STORE_FILE: &str = "settings.json";
 const SETTINGS_KEY: &str = "duck.deck-settings";
 
