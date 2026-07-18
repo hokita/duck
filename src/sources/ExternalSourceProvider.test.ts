@@ -193,6 +193,26 @@ describe("ExternalSourceProvider", () => {
     unsubscribe();
   });
 
+  it("does not overwrite an edit made before the first poll tick", async () => {
+    // useDeckPages calls getPages() for the initial load, then subscribe()
+    // for pushes. If getPages() already saw this exact content, the first
+    // scheduled poll must not treat it as new — otherwise an edit made in
+    // that window (before the first tick) would be clobbered even though
+    // nothing upstream actually changed.
+    const invoke = vi.fn(async () => SOURCE_PAGES);
+    const provider = new ExternalSourceProvider(fallbackProvider(), {
+      invoke,
+      tauri: true,
+      pollMs: 1500,
+    });
+    await provider.getPages();
+    const listener = vi.fn();
+    const unsubscribe = provider.subscribe(listener);
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(listener).not.toHaveBeenCalled();
+    unsubscribe();
+  });
+
   it("skips a poll while the previous one is still in flight", async () => {
     let resolveFirst: ((value: unknown) => void) | undefined;
     const invoke = vi.fn(

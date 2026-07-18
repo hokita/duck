@@ -25,6 +25,13 @@ export class ExternalSourceProvider implements DeckButtonProvider {
   private readonly invoke: InvokeFn;
   private readonly tauri: boolean;
   private readonly pollMs: number;
+  // The listener/caller replaces the app's whole page state (see
+  // useDeckPages), which would otherwise clobber in-progress edit-mode
+  // changes whenever a poll or fetch returns pages identical to what's
+  // already showing. Shared across getPages() and subscribe() so a poll
+  // immediately after the initial getPages() load — the common case, since
+  // useDeckPages calls both on mount — doesn't treat unchanged content as new.
+  private lastSeen: string | null = null;
 
   constructor(
     private readonly fallback: DeckButtonProvider,
@@ -35,20 +42,25 @@ export class ExternalSourceProvider implements DeckButtonProvider {
     this.pollMs = options.pollMs ?? 1500;
   }
 
+  /** Fetches configured source pages, or null when unconfigured/empty. */
+  private async fetchSourcePages(): Promise<DeckPage[] | null> {
+    const pages = (await this.invoke("list_source_pages")) as DeckPage[] | null;
+    return pages && pages.length > 0 ? pages : null;
+  }
+
   async getPages(): Promise<DeckPage[]> {
     if (!this.tauri) {
       return this.fallback.getPages();
     }
+    let pages: DeckPage[];
     try {
-      const pages = (await this.invoke("list_source_pages")) as DeckPage[] | null;
-      if (!pages || pages.length === 0) {
-        return this.fallback.getPages();
-      }
-      return pages;
+      pages = (await this.fetchSourcePages()) ?? (await this.fallback.getPages());
     } catch (error) {
       console.error("[deck] failed to list source pages", error);
-      return this.fallback.getPages();
+      pages = await this.fallback.getPages();
     }
+    this.lastSeen = JSON.stringify(pages);
+    return pages;
   }
 
   subscribe(listener: (pages: DeckPage[]) => void): () => void {
@@ -56,23 +68,17 @@ export class ExternalSourceProvider implements DeckButtonProvider {
       return () => {};
     }
     let polling = false;
-    // The listener replaces the app's whole page state (see useDeckPages),
-    // which would otherwise clobber in-progress edit-mode changes on every
-    // tick even when nothing actually changed upstream. Only push when the
-    // resolved pages differ from what was last pushed.
-    let lastPushed: string | null = null;
     const interval = setInterval(() => {
       if (polling) {
         return;
       }
       polling = true;
-      this.invoke("list_source_pages")
-        .then(async (result) => {
-          const pages = result as DeckPage[] | null;
-          const next = pages && pages.length > 0 ? pages : await this.fallback.getPages();
+      this.fetchSourcePages()
+        .then(async (pages) => pages ?? (await this.fallback.getPages()))
+        .then((next) => {
           const serialized = JSON.stringify(next);
-          if (serialized !== lastPushed) {
-            lastPushed = serialized;
+          if (serialized !== this.lastSeen) {
+            this.lastSeen = serialized;
             listener(next);
           }
         })
