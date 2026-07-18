@@ -5,6 +5,7 @@ import {
   createSettingsStorage,
   type SettingsStorage,
 } from "../settings/storage/SettingsStorage";
+import { ExternalSourceProvider } from "../sources/ExternalSourceProvider";
 
 export interface AppDependencies {
   provider: DeckButtonProvider;
@@ -15,8 +16,8 @@ export interface AppDependencies {
 export const SETTINGS_KEY = "duck.deck-settings";
 
 /**
- * Composition root. Swapping the mock provider for a real one
- * (e.g. new ClaudeCodeButtonProvider()) happens here and only here.
+ * Composition root. Pages come from configured external sources when a
+ * sources.json exists; the mock deck remains the fallback demo.
  */
 export function createAppDependencies(): AppDependencies {
   const dispatcher = new DeckActionDispatcher();
@@ -24,7 +25,7 @@ export function createAppDependencies(): AppDependencies {
     console.log(`[deck] ${action.message}`);
   });
   return {
-    provider: new MockDeckButtonProvider(),
+    provider: new ExternalSourceProvider(new MockDeckButtonProvider()),
     dispatcher,
     settingsStorage: createSettingsStorage(SETTINGS_KEY),
   };
