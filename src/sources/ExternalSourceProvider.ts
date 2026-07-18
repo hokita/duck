@@ -56,6 +56,11 @@ export class ExternalSourceProvider implements DeckButtonProvider {
       return () => {};
     }
     let polling = false;
+    // The listener replaces the app's whole page state (see useDeckPages),
+    // which would otherwise clobber in-progress edit-mode changes on every
+    // tick even when nothing actually changed upstream. Only push when the
+    // resolved pages differ from what was last pushed.
+    let lastPushed: string | null = null;
     const interval = setInterval(() => {
       if (polling) {
         return;
@@ -64,7 +69,12 @@ export class ExternalSourceProvider implements DeckButtonProvider {
       this.invoke("list_source_pages")
         .then(async (result) => {
           const pages = result as DeckPage[] | null;
-          listener(pages && pages.length > 0 ? pages : await this.fallback.getPages());
+          const next = pages && pages.length > 0 ? pages : await this.fallback.getPages();
+          const serialized = JSON.stringify(next);
+          if (serialized !== lastPushed) {
+            lastPushed = serialized;
+            listener(next);
+          }
         })
         .catch((error: unknown) => {
           console.error("[deck] source poll failed", error);

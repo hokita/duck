@@ -134,6 +134,65 @@ describe("ExternalSourceProvider", () => {
     expect(listener).toHaveBeenCalledTimes(1);
   });
 
+  it("does not push again when a poll returns unchanged pages", async () => {
+    // Fresh clones each call (same content, different identity) mimic
+    // MockDeckButtonProvider, so this exercises value equality, not `===`.
+    const invoke = vi.fn(async () => structuredClone(SOURCE_PAGES));
+    const provider = new ExternalSourceProvider(fallbackProvider(), {
+      invoke,
+      tauri: true,
+      pollMs: 1500,
+    });
+    const listener = vi.fn();
+    const unsubscribe = provider.subscribe(listener);
+    await vi.advanceTimersByTimeAsync(1500);
+    await vi.advanceTimersByTimeAsync(1500);
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(listener).toHaveBeenCalledTimes(1);
+    unsubscribe();
+  });
+
+  it("pushes again once the polled pages actually change", async () => {
+    let current = SOURCE_PAGES;
+    const invoke = vi.fn(async () => structuredClone(current));
+    const provider = new ExternalSourceProvider(fallbackProvider(), {
+      invoke,
+      tauri: true,
+      pollMs: 1500,
+    });
+    const listener = vi.fn();
+    const unsubscribe = provider.subscribe(listener);
+    await vi.advanceTimersByTimeAsync(1500);
+    current = [{ id: "s0", name: "Claude Code", buttons: [] }];
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(listener).toHaveBeenCalledTimes(2);
+    expect(listener).toHaveBeenLastCalledWith(current);
+    unsubscribe();
+  });
+
+  it("does not push a repeated unchanged fallback, so a local edit survives", async () => {
+    // No sources configured: every poll resolves the same static mock deck.
+    // A local (edit-mode) change to app state must not be clobbered by the
+    // next unchanged poll.
+    const invoke = vi.fn(async () => null);
+    const provider = new ExternalSourceProvider(fallbackProvider(), {
+      invoke,
+      tauri: true,
+      pollMs: 1500,
+    });
+    const listener = vi.fn();
+    const unsubscribe = provider.subscribe(listener);
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    // Simulate a local edit made after the first (unavoidable) push settles.
+    listener.mockClear();
+    await vi.advanceTimersByTimeAsync(1500);
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(listener).not.toHaveBeenCalled();
+    unsubscribe();
+  });
+
   it("skips a poll while the previous one is still in flight", async () => {
     let resolveFirst: ((value: unknown) => void) | undefined;
     const invoke = vi.fn(
