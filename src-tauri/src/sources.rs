@@ -158,9 +158,23 @@ pub fn button_from_file(
     button
 }
 
+/// Reads a file's contents, but only if it resolves — after following any
+/// symlinks — to a path still inside `root`. `root` should already be
+/// canonicalized. Rejects symlink entries that point outside the configured
+/// source directory (e.g. a `*.json` symlink to an unrelated file elsewhere
+/// on disk), which `read_to_string` would otherwise follow transparently.
+fn read_json_within(root: &std::path::Path, path: &std::path::Path) -> Option<String> {
+    let canonical = std::fs::canonicalize(path).ok()?;
+    if !canonical.starts_with(root) {
+        return None;
+    }
+    std::fs::read_to_string(&canonical).ok()
+}
+
 /// Reads every `*.json` file in the source's directory (sorted by filename)
-/// into deck buttons. Malformed files and an unreadable directory yield fewer
-/// buttons rather than an error, so one bad file can't blank the deck.
+/// into deck buttons. Malformed files, symlinks escaping the directory, and
+/// an unreadable directory yield fewer buttons rather than an error, so one
+/// bad file can't blank the deck.
 pub fn page_from_source(source_index: usize, source: &SourceConfig) -> serde_json::Value {
     let dir = expand_config_value(&source.path);
     let mut paths: Vec<std::path::PathBuf> = std::fs::read_dir(&dir)
@@ -173,11 +187,12 @@ pub fn page_from_source(source_index: usize, source: &SourceConfig) -> serde_jso
         .unwrap_or_default();
     paths.sort();
 
+    let canonical_dir = std::fs::canonicalize(&dir);
     let buttons: Vec<serde_json::Value> = paths
         .iter()
         .filter_map(|path| {
             let stem = path.file_stem()?.to_str()?;
-            let raw = std::fs::read_to_string(path).ok()?;
+            let raw = read_json_within(canonical_dir.as_ref().ok()?, path)?;
             let file: serde_json::Value = serde_json::from_str(&raw).ok()?;
             Some(button_from_file(source_index, stem, &source.button, &file))
         })
@@ -251,10 +266,12 @@ pub fn resolve_button_action(
     if stem.contains('/') || stem.contains("..") || stem.contains('\\') {
         return Err(format!("invalid button id \"{button_id}\""));
     }
-    let path = std::path::Path::new(&expand_config_value(&source.path))
-        .join(format!("{stem}.json"));
-    let raw = std::fs::read_to_string(&path)
-        .map_err(|error| format!("cannot read {}: {error}", path.display()))?;
+    let dir = expand_config_value(&source.path);
+    let canonical_dir = std::fs::canonicalize(&dir)
+        .map_err(|error| format!("cannot access source directory {dir}: {error}"))?;
+    let path = canonical_dir.join(format!("{stem}.json"));
+    let raw = read_json_within(&canonical_dir, &path)
+        .ok_or_else(|| format!("cannot read \"{button_id}\" (missing or outside source directory)"))?;
     let file: serde_json::Value =
         serde_json::from_str(&raw).map_err(|error| error.to_string())?;
     resolve_action(source, &file)
@@ -600,5 +617,51 @@ mod tests {
             dir_with_session(r#"{"tmux_session":"duck","tmux_pane":"%20"}"#);
         assert!(resolve_button_action(&config, "s0", "s0:../corgi-30").is_err());
         assert!(resolve_button_action(&config, "s0", "s0:a/b").is_err());
+    }
+
+    #[test]
+    fn page_from_source_skips_symlinks_that_escape_the_directory() {
+        let outside = tempfile::tempdir().expect("tempdir");
+        std::fs::write(
+            outside.path().join("secret.json"),
+            r#"{"tmux_session":"leaked","tmux_pane":"%99"}"#,
+        )
+        .expect("write secret");
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        std::fs::write(
+            dir.path().join("legit.json"),
+            r#"{"tmux_session":"duck","tmux_pane":"%20"}"#,
+        )
+        .expect("write legit file");
+        std::os::unix::fs::symlink(outside.path().join("secret.json"), dir.path().join("escape.json"))
+            .expect("create symlink");
+
+        let mut source = claude_source();
+        source.path = dir.path().to_string_lossy().into_owned();
+        let page = page_from_source(0, &source);
+
+        let buttons = page["buttons"].as_array().expect("buttons array");
+        assert_eq!(buttons.len(), 1, "the escaping symlink must be skipped");
+        assert_eq!(buttons[0]["title"], "duck");
+    }
+
+    #[test]
+    fn resolve_button_action_rejects_a_symlink_that_escapes_the_directory() {
+        let outside = tempfile::tempdir().expect("tempdir");
+        std::fs::write(
+            outside.path().join("secret.json"),
+            r#"{"tmux_session":"leaked","tmux_pane":"%99"}"#,
+        )
+        .expect("write secret");
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        std::os::unix::fs::symlink(outside.path().join("secret.json"), dir.path().join("escape.json"))
+            .expect("create symlink");
+
+        let mut config = parse_sources_config(CLAUDE_EXAMPLE).expect("parses");
+        config.sources[0].path = dir.path().to_string_lossy().into_owned();
+
+        assert!(resolve_button_action(&config, "s0", "s0:escape").is_err());
     }
 }
