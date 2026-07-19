@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { DeckToolbar } from "./DeckToolbar";
@@ -12,14 +12,24 @@ const renderToolbar = (overrides: Partial<Parameters<typeof DeckToolbar>[0]> = {
       onToggleEdit={vi.fn()}
       onOpenSettings={vi.fn()}
       onClose={vi.fn()}
+      onDragStart={vi.fn()}
       {...overrides}
     />,
   );
 
 describe("DeckToolbar", () => {
-  it("marks itself as the window drag region", () => {
-    const { container } = renderToolbar();
-    expect(container.querySelector("[data-tauri-drag-region]")).not.toBeNull();
+  it("starts a window drag on mousedown over the toolbar", () => {
+    const onDragStart = vi.fn();
+    const { container } = renderToolbar({ onDragStart });
+    fireEvent.mouseDown(container.querySelector(".deck-toolbar__title")!);
+    expect(onDragStart).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not start a window drag from a toolbar button", () => {
+    const onDragStart = vi.fn();
+    renderToolbar({ onDragStart });
+    fireEvent.mouseDown(screen.getByRole("button", { name: "Toggle edit mode" }));
+    expect(onDragStart).not.toHaveBeenCalled();
   });
 
   it("announces the current page position", () => {

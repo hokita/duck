@@ -9,7 +9,7 @@ import { moveButton, updateButton, type MoveDirection } from "../editor/editOper
 import { SettingsPanel } from "../settings/components/SettingsPanel";
 import { useDeckSettings } from "../settings/useDeckSettings";
 import { activateSourceButton } from "../sources/activateSourceButton";
-import { closeAppWindow, setWindowAlwaysOnTop } from "../shared/tauri";
+import { closeAppWindow, setWindowAlwaysOnTop, startWindowDrag } from "../shared/tauri";
 import { createAppDependencies, type AppDependencies } from "./providers";
 
 export type { AppDependencies };
@@ -108,6 +108,11 @@ export default function App({ dependencies }: { dependencies?: AppDependencies }
         onClose={() =>
           closeAppWindow().catch((error) => {
             console.error("[deck] failed to close window", error);
+          })
+        }
+        onDragStart={(event) =>
+          startWindowDrag(event).catch((error) => {
+            console.error("[deck] failed to start window drag", error);
           })
         }
       />

@@ -254,13 +254,22 @@ Limitations:
   of by the OS (`shadow: false`).
 - `macOSPrivateApi: true` is required for window transparency to render correctly
   on macOS.
-- The toolbar header is the only drag region (`data-tauri-drag-region`), so the
-  window can be repositioned without swallowing clicks on grid buttons.
+- The toolbar header is the only drag region, so the window can be repositioned
+  without swallowing clicks on grid buttons. It's implemented manually
+  (`DeckToolbar`'s `onDragStart` → `startWindowDrag` in `src/shared/tauri.ts`),
+  tracking mouse deltas and repositioning the window via `setPosition`, rather
+  than the usual `data-tauri-drag-region` attribute. That attribute calls
+  Tauri's built-in `start_dragging` command, backed by macOS's
+  `performWindowDragWithEvent:` — which only works when invoked synchronously
+  from a live mouseDown, and is a silent no-op when called asynchronously
+  through the WKWebView bridge the way Tauri's own drag-region script calls it,
+  so the window never actually moved.
 - Capabilities are scoped to exactly what's used: `core:default`,
-  `core:window:allow-set-always-on-top` (for the always-on-top setting), and
-  `core:window:allow-close` (for the toolbar's close button). Notably, no
-  `store:*` permission is granted — settings persistence goes through the
-  fixed-path `load_settings`/`save_settings` commands instead (see
+  `core:window:allow-set-always-on-top` (for the always-on-top setting),
+  `core:window:allow-close` (for the toolbar's close button), and
+  `core:window:allow-set-position` (for the manual drag implementation above).
+  Notably, no `store:*` permission is granted — settings persistence
+  goes through the fixed-path `load_settings`/`save_settings` commands instead (see
   [Persistence](#persistence)), so the WebView has no way to read or write an
   arbitrary file via the store plugin. External sources follow the same pattern
   (see [External sources](#external-sources)): fixed-purpose commands that
