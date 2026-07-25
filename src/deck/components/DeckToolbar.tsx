@@ -1,3 +1,5 @@
+import type { MouseEvent as ReactMouseEvent } from "react";
+
 export interface DeckToolbarProps {
   pageIndex: number;
   pageCount: number;
@@ -5,6 +7,7 @@ export interface DeckToolbarProps {
   onToggleEdit(): void;
   onOpenSettings(): void;
   onClose(): void;
+  onDragStart(event: ReactMouseEvent<HTMLElement>): void;
 }
 
 export function DeckToolbar({
@@ -14,13 +17,17 @@ export function DeckToolbar({
   onToggleEdit,
   onOpenSettings,
   onClose,
+  onDragStart,
 }: DeckToolbarProps) {
   const shownCount = Math.max(pageCount, 1);
+  const handleMouseDown = (event: ReactMouseEvent<HTMLElement>) => {
+    if (event.button !== 0) return;
+    if ((event.target as HTMLElement).closest("button")) return;
+    onDragStart(event);
+  };
   return (
-    <header className="deck-toolbar" data-tauri-drag-region>
-      <span className="deck-toolbar__title" data-tauri-drag-region>
-        DUCK
-      </span>
+    <header className="deck-toolbar" onMouseDown={handleMouseDown}>
+      <span className="deck-toolbar__title">DUCK</span>
       <span
         className="deck-toolbar__pages"
         role="status"
