@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import type { DeckButton } from "../models/DeckButton";
+import { isImageIcon, type DeckButton } from "../models/DeckButton";
 
 export interface DeckButtonViewProps {
   button: DeckButton | null;
@@ -59,7 +59,11 @@ export function DeckButtonView({
     >
       {button.badge ? <span className="deck-button__badge">{button.badge}</span> : null}
       <span className="deck-button__icon" aria-hidden="true">
-        {button.icon ?? ""}
+        {isImageIcon(button.icon) ? (
+          <img className="deck-button__icon-image" src={button.icon} alt="" />
+        ) : (
+          (button.icon ?? "")
+        )}
       </span>
       {button.title ? <span className="deck-button__title">{button.title}</span> : null}
       {!compact && button.subtitle ? (

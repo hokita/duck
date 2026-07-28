@@ -220,6 +220,17 @@ body,
   font-size: calc(var(--button-size) * 0.4);
 }
 
+.deck-button__icon-image {
+  width: calc(var(--button-size) * 0.3);
+  height: calc(var(--button-size) * 0.3);
+  object-fit: contain;
+}
+
+.deck-button--compact .deck-button__icon-image {
+  width: calc(var(--button-size) * 0.4);
+  height: calc(var(--button-size) * 0.4);
+}
+
 .deck-button__title {
   max-width: 100%;
   overflow: hidden;
