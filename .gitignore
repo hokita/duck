@@ -24,3 +24,6 @@ dist-ssr
 
 # Local agent config
 .claude/
+
+# Subagent-driven-development scratch workspace
+.superpowers/
