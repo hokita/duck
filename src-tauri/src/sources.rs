@@ -24,6 +24,8 @@ pub struct SourceConfig {
 pub struct ButtonMapping {
     pub title: String,
     pub subtitle: Option<String>,
+    /// Emoji/short glyph, or a `data:image/...` URI rendered as an image by
+    /// the frontend (see `isImageIcon` in `src/deck/models/DeckButton.ts`).
     pub icon: Option<String>,
     pub status: Option<StatusMapping>,
     pub action: Option<Vec<String>>,
@@ -478,6 +480,14 @@ mod tests {
         assert_eq!(button["action"]["payload"]["sourceId"], "s0");
         assert_eq!(button["action"]["payload"]["buttonId"], "s0:corgi-30");
         assert!(button.get("icon").is_none());
+    }
+
+    #[test]
+    fn button_from_file_passes_through_data_uri_icon_unchanged() {
+        let mut source = claude_source();
+        source.button.icon = Some("data:image/png;base64,iVBORw0KGgo=".to_string());
+        let button = button_from_file(0, "corgi-30", &source.button, &session_file());
+        assert_eq!(button["icon"], "data:image/png;base64,iVBORw0KGgo=");
     }
 
     #[test]
