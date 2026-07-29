@@ -34,6 +34,21 @@ describe("DeckButtonView", () => {
     expect(screen.getByText("3")).toBeInTheDocument();
   });
 
+  it("renders an image when icon is a data:image URI", () => {
+    const { container } = renderButton({
+      button: { ...button, icon: "data:image/png;base64,AAA" },
+    });
+    const img = container.querySelector(".deck-button__icon-image");
+    expect(img).not.toBeNull();
+    expect(img).toHaveAttribute("src", "data:image/png;base64,AAA");
+  });
+
+  it("renders a plain glyph as text, not an image", () => {
+    const { container } = renderButton();
+    expect(container.querySelector(".deck-button__icon-image")).toBeNull();
+    expect(screen.getByText("🖥️")).toBeInTheDocument();
+  });
+
   it("activates on click in deck mode", async () => {
     const onActivate = vi.fn();
     renderButton({ onActivate });

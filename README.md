@@ -206,6 +206,9 @@ Semantics:
 - `{field}` placeholders in `title`/`subtitle`/`icon`/`action` substitute the
   file's top-level values — strings as-is, numbers/booleans stringified,
   missing/non-scalar fields as the empty string.
+- `icon` also accepts a `data:image/...;base64,...` URI, rendered as an image
+  instead of a text glyph — e.g. to show a tool's logo instead of an emoji:
+  `"icon": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB..."`.
 - `status.field` names a file field whose value is looked up in `status.map`; the
   result must be a valid button status (`idle`, `active`, `working`, `done`,
   `warning`, `error`), otherwise the button simply has no status LED.
