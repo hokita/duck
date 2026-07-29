@@ -13,4 +13,8 @@ describe("isImageIcon", () => {
   it("returns false for undefined", () => {
     expect(isImageIcon(undefined)).toBe(false);
   });
+
+  it("returns true for an uppercase/mixed-case media type", () => {
+    expect(isImageIcon("data:IMAGE/PNG;base64,AAA")).toBe(true);
+  });
 });

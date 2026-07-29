@@ -16,5 +16,5 @@ export interface DeckButton {
 }
 
 export function isImageIcon(icon?: string): boolean {
-  return icon?.startsWith("data:image/") ?? false;
+  return icon?.toLowerCase().startsWith("data:image/") ?? false;
 }
